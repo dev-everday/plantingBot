@@ -1,0 +1,57 @@
+name: daily planting bot
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 12 * * *'
+
+jobs:
+  auto-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v3
+        with:
+         fetch-depth: 0
+
+      - name: 오늘 커밋 여부 확인
+        id: check_commit
+        run: |
+          DATE=$(TZ=Asia/Seoul date '+%Y-%m-%d')
+          echo "오늘 날짜: $DATE"
+          if git log --since="$DATE 00:00 +0900" --author="$GITHUB_ACTOR" --oneline | grep .; then
+            echo "오늘 이미 커밋이 있습니다. 워크플로를 종료합니다."
+            echo "should_run=false" >> $GITHUB_OUTPUT
+          else
+            echo "오늘 커밋이 없습니다. 자동 커밋을 진행합니다."
+            echo "should_run=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 파일 업데이트
+        if: steps.check_commit.outputs.should_run == 'true'
+        run: |
+          DATE=$(TZ=Asia/Seoul date '+%Y%m%d')
+          echo "DATE=${DATE}" >> $GITHUB_ENV  # DATE 변수를 환경 변수로 설정
+          echo "🌿오늘은 bot이 잔디 심어요🌿" > "[${DATE}]"
+
+      - name: 변경 사항 커밋
+        if: steps.check_commit.outputs.should_run == 'true'
+        run: |
+          echo "사용 중인 DATE 변수: ${DATE}"
+          git config --global user.name "$GITHUB_ACTOR"
+          git config --global user.email "${{ secrets.USER_EMAIL }}"
+          ls -l  # 현재 디렉토리의 파일 목록 확인
+          git add "[${DATE}]"
+          git commit -m "자동 커밋: ${DATE}"
+
+      - name: 자격 증명 설정
+        if: steps.check_commit.outputs.should_run == 'true'
+        run: |
+          git config --global user.name "$GITHUB_ACTOR"
+          git config --global user.email "${{ secrets.USER_EMAIL }}"
+          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
+
+      - name: 변경 사항 푸시
+        if: steps.check_commit.outputs.should_run == 'true'
+        run: |
+          git push
